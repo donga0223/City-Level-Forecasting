@@ -1,0 +1,204 @@
+---
+title: "Load HHS Protect/NHSN data"
+author: "Lauren White (lauren.white@cdph.ca.gov)"
+date: '2024-05-14'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(RSocrata)
+library(readr)
+library(ggplot2)
+library(lubridate)
+library(tidyr)
+```
+
+## Load Publicly Avaialable NHSN (state level and facility level)
+
+You can directly download the data from the website using this code. However, please note that this dataset has not been updated since May 3, 2024. Therefore, the most recent available data is from April 21, 2024. Since downloading the data may take some time, I have already downloaded it to my working directory, especially considering that the data is no longer being updated.
+
+```{r load-nhsn}
+#flu_covid_facility <- read.socrata("https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/anag-cw7u", stringsAsFactors = FALSE)
+
+#flu_covid_state <- read.socrata("https://healthdata.gov/Hospital/COVID-19-Reported-Patient-Impact-and-Hospital-Capa/g62h-syeh", stringsAsFactors = FALSE)
+```
+
+If you download this data file to your working directory, make sure to read the data from that directory.
+
+```{r}
+setwd("/Users/dk29776/Dropbox/UTAustin/Forecasting/NHSN")
+flu_covid_facility <- read.csv("data/COVID-19_Reported_Patient_Impact_and_Hospital_Capacity_by_Facility_20240517.csv")
+flu_covid_state <- read.csv("data/COVID-19_Reported_Patient_Impact_and_Hospital_Capacity_by_State_Timeseries__RAW__20240517.csv")
+
+```
+
+## Load city level and state level population
+
+```{r}
+city_all <- read.csv("data/SUB-IP-EST2023-CITY.csv")
+
+city_pop <- city_all %>%
+  separate(Area, into = c("city", "state"), sep = ", ", remove = FALSE) %>%
+  mutate(city = gsub(" city", "", city)) %>% 
+  mutate(city = toupper(city), city_estimate_2023 = X2023, 
+         city_2023 = as.numeric(gsub(",", "", X2023))) %>%
+  select(city, state, city_estimate_2023, city_2023)
+
+head(city_pop)
+
+state_all <- read.csv("data/NST-EST2023-POP.csv")
+state_pop <- state_all[,c(1,2,7)] %>%
+  mutate(state_2023_estimate = X2023, 
+         state_2023 = as.numeric(gsub(",", "", state_2023_estimate)),
+         state_full = gsub("\\.", "", Geographic.Area)) %>%
+  select(-X2023, -Geographic.Area)
+
+head(state_pop)
+
+all_pop <- city_pop %>% left_join(state_pop, by=c("state" = "state_full"))
+head(all_pop)
+```
+
+
+## Handling city level data
+### Select the variables of interest, modify their names if necessary, and replace any occurrences of -999999 with NA.
+
+```{r}
+city_data <- flu_covid_facility %>% 
+  select(hospital_pk, collection_week, state, city, zip, is_metro_micro,
+         inpatient_beds_7_day_avg, total_icu_beds_7_day_avg, 
+         influenza_7_day_avg = total_patients_hospitalized_confirmed_influenza_7_day_avg,
+         influenza_7_day_sum = total_patients_hospitalized_confirmed_influenza_7_day_sum,
+         influenza_and_covid_7_day_avg = total_patients_hospitalized_confirmed_influenza_and_covid_7_day_avg,
+         influenza_and_covid_7_day_sum = total_patients_hospitalized_confirmed_influenza_and_covid_7_day_sum) 
+
+
+city_data <- city_data %>%
+  mutate(collection_week = as.Date(collection_week),
+         inpatient_beds_7_day_avg = ifelse(inpatient_beds_7_day_avg == -999999, NA, inpatient_beds_7_day_avg),
+         total_icu_beds_7_day_avg = ifelse(total_icu_beds_7_day_avg == -999999, NA, total_icu_beds_7_day_avg),
+         influenza_7_day_avg = ifelse(influenza_7_day_avg == -999999, NA, influenza_7_day_avg),
+         influenza_7_day_sum = ifelse(influenza_7_day_sum == -999999, NA, influenza_7_day_sum),
+         influenza_and_covid_7_day_avg = ifelse(influenza_and_covid_7_day_avg == -999999, NA, influenza_and_covid_7_day_avg),
+         influenza_and_covid_7_day_sum = ifelse(influenza_and_covid_7_day_sum == -999999, NA, influenza_and_covid_7_day_sum))
+
+head(city_data)
+```
+
+
+### Since this data tracks the number of patients at the facility level, it is aggregated on the city level.
+
+```{r}
+city_aggregate <- city_data %>% 
+  group_by(collection_week, state, city) %>%
+  summarise(inpatient_beds_7_day_avg = sum(inpatient_beds_7_day_avg, na.rm = TRUE),
+            total_icu_beds_7_day_avg = sum(total_icu_beds_7_day_avg, na.rm = TRUE),
+            influenza_7_day_avg = sum(influenza_7_day_avg, na.rm = TRUE),
+            influenza_7_day_sum = sum(influenza_7_day_sum, na.rm = TRUE),
+            influenza_and_covid_7_day_avg = sum(influenza_and_covid_7_day_avg, na.rm = TRUE),
+            influenza_and_covid_7_day_sum = sum(influenza_and_covid_7_day_sum, na.rm = TRUE))
+
+## Check whether each date and city combination corresponds to one line of data.
+city_aggregate %>% filter(collection_week == "2020-05-17" & city == "AUSTIN")
+
+## add city population size 
+city_aggregate_pop <-  left_join(city_aggregate, all_pop, by = c("city" = "city", "state" = "state.y"))
+city_aggregate_pop
+
+```
+
+
+
+
+
+## Handling State level data 
+
+State-level data is collected daily, while facility-level data is collected weekly. Therefore, we need to convert the daily data to weekly data.
+
+```{r}
+flu_covie_state_data <- flu_covid_state %>% 
+  select(state, date, confirmed_influenza = total_patients_hospitalized_confirmed_influenza, 
+         confirmed_influenza_and_covid = total_patients_hospitalized_confirmed_influenza_and_covid) %>%
+  mutate(date = as.Date(date))
+
+start_date = as.Date("2019-12-30")
+end_date = as.Date("2024-04-27")
+
+
+## to change daily data to weekly data
+flu_covie_state_data <- flu_covie_state_data %>%
+  mutate(week_group = cut(date, breaks = seq(start_date, end_date, by = "week"), labels = FALSE))
+
+flu_covie_state_weekly <- flu_covie_state_data %>%
+  group_by(state, week_group) %>%
+  summarize(
+    week_date = max(date),
+    confirmed_influenza = sum(confirmed_influenza),
+    confirmed_influenza_and_covid = sum(confirmed_influenza_and_covid)
+  )
+
+
+flu_covie_state_weekly %>% filter(week_date > "2021-01-01" & week_date < "2021-03-01" & state == "NY")
+flu_covie_state_data %>% filter(date >= "2021-01-03" & date < "2021-01-11" & state == "NY")
+
+ggplot(flu_covie_state_weekly, aes(x = week_date, y = confirmed_influenza, color = state))+
+  geom_line() #+ 
+  #scale_x_date(labels = date_format("%Y"))
+
+# add population size
+state_weekly_pop <- left_join(flu_covie_state_weekly, state_pop, by = c("state" = "state"))
+  
+
+```
+
+## Compare city vs state
+
+```{r}
+
+top10city <- all_pop[1:10,c(1,3,4,5,7)] 
+names(top10city) <- c("city", "city_estimate_2023", "city_2023", "state", "state_2023")
+top10city <- top10city %>%
+  mutate(city_state = paste(city, state, sep = "_"),
+         pop_ratio = city_2023/state_2023)
+
+influenza_data <- city_aggregate_pop %>%
+  select("collection_week", "state", "city", "influenza_7_day_sum", "city_estimate_2023", "city_2023",
+         "state_2023_estimate") %>%
+  left_join(state_weekly_pop, by = c("state" = "state", "collection_week" = "week_date", 
+                                     "state_2023_estimate" = "state_2023_estimate"))
+
+
+ 
+
+myratio <- influenza_data %>%
+  group_by(state, city) %>%
+  summarize(max_confirmed_influenza = max(confirmed_influenza, na.rm = TRUE),
+            max_influenza_7_day_sum = max(influenza_7_day_sum, na.rm = TRUE)) %>%
+  mutate(ratio = max_confirmed_influenza / max_influenza_7_day_sum)
+
+
+influenza_data <- influenza_data %>%
+  left_join(myratio, by = c("state", "city"))
+
+
+influenza_data <- influenza_data %>%
+  mutate(city_state = paste(city, state, sep = "_"))
+
+influenza_data %>%
+  filter(city_state %in% top10city$city_state) %>%
+  ggplot(aes(x = collection_week, y = influenza_7_day_sum, color = 'red')) +
+  geom_line() +
+  geom_line(aes(y = confirmed_influenza / ratio, color = "blue")) +
+  theme(legend.position = "none") + 
+  facet_wrap(~city_state, scales = "free")+
+  theme(axis.text.y.right = element_text(color = "blue"),
+          axis.title.y.right = element_text(color = "blue"),
+          axis.text.y.left = element_text(color = "red"),
+          axis.title.y.left = element_text(color = "red"))  
+    #ggtitle(paste(top10city$city_state, " (pop:", top10city$city_estimate_2023, ")", top10city$city_2023/top10city$state_2023, sep = "") )
+
+  
+top10city
+```
