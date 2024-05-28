@@ -1,7 +1,5 @@
 ---
-title: "Load HHS Protect/NHSN data"
-author: "Lauren White (lauren.white@cdph.ca.gov)"
-date: '2024-05-14'
+title: "Load NHSN data"
 output: html_document
 ---
 
