@@ -162,8 +162,8 @@ top10city <- top10city %>%
          pop_ratio = city_2023/state_2023)
 
 influenza_data <- city_aggregate_pop %>%
-  select("collection_week", "state", "city", "influenza_7_day_sum", "city_estimate_2023", "city_2023",
-         "state_2023_estimate") %>%
+  select("collection_week", "state", "city", "influenza_7_day_sum", "influenza_and_covid_7_day_sum", "city_estimate_2023",
+         "city_2023", "state_2023_estimate") %>%
   left_join(state_weekly_pop, by = c("state" = "state", "collection_week" = "week_date", 
                                      "state_2023_estimate" = "state_2023_estimate"))
 
@@ -199,4 +199,47 @@ influenza_data %>%
 
   
 top10city
+```
+
+
+```{r}
+
+influenza_data <- city_aggregate_pop %>%
+  select("collection_week", "state", "city", "influenza_7_day_sum", "influenza_and_covid_7_day_sum", "city_estimate_2023",
+         "city_2023", "state_2023_estimate") %>%
+  left_join(state_weekly_pop, by = c("state" = "state", "collection_week" = "week_date", 
+                                     "state_2023_estimate" = "state_2023_estimate"))
+
+
+
+myratio <- influenza_data %>%
+  group_by(state, city) %>%
+  summarize(max_confirmed_influenza_and_covid = max(confirmed_influenza_and_covid, na.rm = TRUE),
+            max_influenza_and_covid_7_day_sum = max(influenza_and_covid_7_day_sum, na.rm = TRUE)) %>%
+  mutate(ratio = max_confirmed_influenza_and_covid / max_influenza_and_covid_7_day_sum)
+
+
+influenza_data <- influenza_data %>%
+  left_join(myratio, by = c("state", "city"))
+
+
+influenza_data <- influenza_data %>%
+  mutate(city_state = paste(city, state, sep = "_"))
+
+influenza_data %>%
+  filter(city_state %in% top10city$city_state) %>%
+  ggplot(aes(x = collection_week, y = influenza_and_covid_7_day_sum, color = 'red')) +
+  geom_line() +
+  geom_line(aes(y = confirmed_influenza_and_covid / ratio, color = "blue")) +
+  theme(legend.position = "none") + 
+  facet_wrap(~city_state, scales = "free")+
+  theme(axis.text.y.right = element_text(color = "blue"),
+          axis.title.y.right = element_text(color = "blue"),
+          axis.text.y.left = element_text(color = "red"),
+          axis.title.y.left = element_text(color = "red"))  
+    #ggtitle(paste(top10city$city_state, " (pop:", top10city$city_estimate_2023, ")", top10city$city_2023/top10city$state_2023, sep = "") )
+
+  
+top10city
+
 ```
