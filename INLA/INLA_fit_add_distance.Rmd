@@ -1,0 +1,121 @@
+---
+title: "INLA_fit_add_distance"
+output: html_document
+date: "2024-07-11"
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+library(INLA)
+library(geosphere)
+setwd("/Users/dk29776/Dropbox/UTAustin/Forecasting")
+source("INLA/INLA_fit_cities_function.R")
+source("INLA/INLA_models.R")
+
+
+################################
+#### create distance matrix
+################################
+
+# Define city coordinates (latitude and longitude)
+city_coords <- data.frame(
+  city = c("HOUSTON", "SAN ANTONIO", "DALLAS", "AUSTIN", "FORT WORTH", "EL PASO", "ARLINGTON",
+           "CORPUS CHRISTI", "PLANO", "LAREDO", "LUBBOCK", "IRVING"),
+  lat = c(29.7604, 29.4241, 32.7767, 30.2672, 32.7555, 31.7619, 32.7357, 27.8006, 33.0198, 27.5064, 33.5779, 32.8140),
+  lon = c(-95.3698, -98.4936, -96.7970, -97.7431, -97.3308, -106.4850, -97.1081, -97.3964, -96.6989, -99.5075, -101.8552, -96.9489)
+)
+
+# Extract the coordinates
+coords <- as.matrix(city_coords[, c("lon", "lat")])
+
+# Calculate the distance matrix
+distance_matrix <- distm(coords, fun = distHaversine)
+
+# Convert distance from meters to kilometers
+distance_matrix <- distance_matrix / 1000
+
+# Set row and column names for readability
+rownames(distance_matrix) <- city_coords$city
+colnames(distance_matrix) <- city_coords$city
+
+# Print the distance matrix
+print(distance_matrix)
+
+
+```
+
+```{r}
+
+################################
+#### load data
+################################
+
+c1 <- read.csv("/Users/dk29776/Dropbox/UTAustin/Forecasting/NHSN/data/city_level_data.csv")
+
+c1 <- c1 %>%
+  mutate(collection_week = ymd(collection_week),      # Assuming collection_week is in YYYY-MM-DD format
+         normalized_influenza = influenza_7_day_sum/(7*(city_2023/100000))) 
+
+mycity = c("HOUSTON", "SAN ANTONIO", "DALLAS", "AUSTIN", "FORT WORTH", "EL PASO", "ARLINGTON",
+           "CORPUS CHRISTI", "PLANO", "LAREDO", "LUBBOCK", "IRVING")
+
+```
+
+
+## Fitting INLA
+```{r}
+
+forecast_date <- as.Date("2023-12-04")
+
+d1 <- c1 %>% 
+  filter(state == "TX", city %in% mycity,
+         collection_week >= "2021-07-01") %>%
+  mutate(city = factor(city, levels = mycity)) %>%
+  select(collection_week, state, city, influenza = influenza_7_day_sum)
+
+hyper_epwk <- list(theta=list(prior="loggamma", param=c(1, 0.01))) # more favorable to large jumps
+hyper_wk <- list(theta=list(prior="loggamma", param=c(1.5, 0.05))) # precision constrained away from 0; P(prec<1)=0.02%, 
+
+
+flu_model_shareseason_ar1_dist <-  paste0(
+  'count ~ 1 + city + ',
+  'f(epiweek, model="rw2", cyclic=TRUE, hyper=hyper_epwk, scale.model=TRUE) + ',
+  'f(city_id, model="besagproper", graph=distance_matrix, hyper=hyper_wk, group=t, control.group=list(model="ar1"))' 
+)
+
+flu_model_shareseason_ar1 <- flu_model_severalcity(epishare = TRUE, ar=1)
+
+### exchangeable model 
+
+inla_fit_cities(d1 = d1, forecast_date = forecast_date, model = flu_model_shareseason_ar1, 
+                mycity = mycity, hyper_epwk, hyper_wk, horizon = 4, 
+                joint_season = TRUE, W.model = NULL, dist = FALSE)
+
+
+### add distance 
+
+inla_fit_cities(d1 = d1, forecast_date = forecast_date, model = flu_model_shareseason_ar1_dist, 
+                mycity = mycity, hyper_epwk, hyper_wk, horizon = 4, 
+                joint_season = TRUE, W.model = NULL, dist = TRUE)
+
+
+
+
+################################
+#### fitting INLA with several dates
+################################
+
+### exchangeable model 
+inla_fit_several_forecastdate_cities(d1, forecast_date = c("2023-10-01", "2023-11-19", "2024-01-07", "2024-02-18", "2024-03-24"), 
+                                     model = flu_model_shareseason_ar1, mycity = mycity, hyper_epwk = hyper_epwk, hyper_wk = hyper_wk, horizon = 4,
+                                     joint_season = TRUE, W.model = "ar1, share seaseon, exchangeable")
+
+### add distance 
+inla_fit_several_forecastdate_cities(d1, forecast_date = c("2023-10-01", "2023-11-19", "2024-01-07", "2024-02-18", "2024-03-24"), 
+                                     model = flu_model_shareseason_ar1_dist, mycity = mycity, hyper_epwk = hyper_epwk, hyper_wk = hyper_wk, horizon = 4,
+                                     joint_season = TRUE, W.model = "ar1, share seaseon, dist", dist = TRUE)
+
+
+
+```
