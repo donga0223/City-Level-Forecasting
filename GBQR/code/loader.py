@@ -76,6 +76,23 @@ def get_holidays():
   
   return hol[['season', 'holiday', 'date', 'season_week']]
 
+def adjust_year_based_on_target_end_date(df):
+    """
+    Adjusts the `year` column based on `wk_end_date` to correctly assign flu seasons.
 
+    - If `wk_end_date` is on or before January 6, the year is adjusted to the previous year.
+    - However, if `epiweek` is 1, the year remains unchanged even if `wk_end_date` is before January 6.
+    
+    This adjustment ensures that flu seasons are assigned correctly without misclassifying early January data.
+    """
+    # Convert `wk_end_date` to datetime format
+    df['wk_end_date'] = pd.to_datetime(df['wk_end_date'])
 
+    # Define condition: Adjust year if `wk_end_date` is ≤ January 6 AND `epiweek` is not 1
+    mask = (df['wk_end_date'].dt.month == 1) & (df['wk_end_date'].dt.day <= 6) & (df['epiweek'] != 1)
+
+    # Adjust the year for selected rows
+    df.loc[mask, 'year'] = df['year'] - 1
+
+    return df
 
