@@ -56,7 +56,7 @@ fit_inla_bren <- function(forecast_date, df = filtered_df, weeks_ahead=4, quanti
     select(reference_date, location, horizon, target, target_end_date, output_type, output_type_id, value)
   #pivot_wider(names_from=quantile)  # wide format for ribbon plots
   
-  write.csv(pred_summ, paste("epiENGAGE-INLA/model_output/", graphical_level, "/", reference_date, "-epiENGAGE-INFLAenza.csv", sep=""))
+  write.csv(pred_summ, paste("epiENGAGE-INFLAenza/model_output/", graphical_level, "/", reference_date, "-epiENGAGE-INFLAenza.csv", sep=""), row.names = FALSE)
 }
 
 
@@ -73,7 +73,9 @@ date_list = c(as.Date("2023-10-12"), as.Date("2023-11-24"), as.Date("2023-12-13"
               as.Date("2023-12-20"), as.Date("2024-01-24"), as.Date("2024-03-01") )
 
 
-date_list = c(as.Date("2025-01-23"), as.Date("2025-01-30"), as.Date("2025-02-03"))
+#as.Date("2025-01-23"),
+
+date_list = c( as.Date("2025-01-30"), as.Date("2025-02-03"))
               
 
 for(i in date_list){
@@ -83,7 +85,3 @@ for(i in date_list){
   
 }
   
-
-
-
-
