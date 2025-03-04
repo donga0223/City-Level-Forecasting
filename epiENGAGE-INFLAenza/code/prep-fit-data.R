@@ -5,7 +5,8 @@ library(spdep)
 prep_fit_data <- function(df, weeks_ahead=4, ex_lam=population) {
   pred_df <- expand_grid( # makes pairs of new weeks X location
     tibble(
-      date=duration(1:weeks_ahead, "week") + max(df$date),
+      date = max(df$date) + weeks(1:weeks_ahead),
+      #date=duration(1:weeks_ahead, "week") + max(df$date),
       t=1:weeks_ahead + max(df$t),
       epiweek=epiweek(date)
     ),
@@ -25,5 +26,4 @@ prep_fit_data <- function(df, weeks_ahead=4, ex_lam=population) {
   pred_df <- bind_rows(df, pred_df) # add to data for counts to be NAs
   return(pred_df)
 }
-
 
