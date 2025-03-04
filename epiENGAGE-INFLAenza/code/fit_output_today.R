@@ -6,7 +6,7 @@ source("epiENGAGE-INFLAenza/code/prep-fit-data.R")
 source("epiENGAGE-INFLAenza/code/fit-inla-model.R")
 source("epiENGAGE-INFLAenza/code/sample-forecasts.R")
 source("epiENGAGE-INFLAenza/code/INLA_models.R")
-source("epiENGAGE-INFLAenza/code/model-formulas.R")
+
 
 
 inla.setOption(inla.mode="classic")
