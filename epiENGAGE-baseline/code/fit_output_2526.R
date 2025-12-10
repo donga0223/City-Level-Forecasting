@@ -1,5 +1,5 @@
 
-setwd("/Users/dk29776/Dropbox/UTAustin/City-Level-Forecasting-local")
+setwd("/Users/dk29776/Dropbox/UTAustin/City-Level-Forecasting")
 source("epiENGAGE-baseline/code/quantile_baseline.R")
 source("epiENGAGE-baseline/code/estimation.R")
 source("epiENGAGE-baseline/code/transform.R")
@@ -15,7 +15,7 @@ fit_and_forecast_baseline <- function(data, quantiles, horizon, num_samples) {
   data <- data %>% arrange(target_end_date)
   
   # Extract incidence data
-  incidence <- data$oracle_value
+  incidence <- data$observation
   
   # Fit the baseline model
   baseline_model <- fit_quantile_baseline(incidence, symmetrize = TRUE)
@@ -42,18 +42,22 @@ fit_and_forecast_baseline <- function(data, quantiles, horizon, num_samples) {
 library(lubridate)
 # Set parameters for forecasting
 quantiles <- c(0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975)  # Prediction intervals
-horizon <- 5  # Forecast 7 days ahead
+horizon <- 4  # Forecast 7 days ahead
 num_samples <- 1000  # Number of Monte Carlo samples
 
-forecast_date <- as.Date(today()-56) 
+forecast_date <- as.Date(today())
 reference_date = forecast_date + (6 - as.integer(format(forecast_date, "%u"))) %% 7
-print(reference_date)
-c1 <- read.csv("https://raw.githubusercontent.com/reichlab/flu-metrocast/main/target-data/oracle-output.csv") %>%
+reference_date
+
+c1 <- read.csv("https://raw.githubusercontent.com/reichlab/flu-metrocast/main/target-data/latest-data.csv") %>%
   filter(target_end_date <= forecast_date)
 
 
+aa <- c1 %>% filter(target_end_date == '2025-11-29') %>% select(location)
+
 # Apply the function to each location and combine results
 forecast_output <- c1 %>%
+  filter(location %in% aa$location) %>%
   group_split(location) %>%  # Split data by location
   map_dfr(~fit_and_forecast_baseline(.x, quantiles, horizon, num_samples))  # Apply function and merge results
 
@@ -61,14 +65,12 @@ forecast_output <- c1 %>%
 forecast_output1 <- forecast_output %>%
   filter(type == "inc", location != "Unknown") %>%
   mutate(reference_date = reference_date, 
-         horizon = ifelse(target == "ILI ED visits", horizon - 1, horizon - 2),  # Conditional horizon update
+         horizon = horizon - 1,  # Conditional horizon update
          output_type = "quantile") %>%
   rename(output_type_id = quantile) %>%
   mutate(target_end_date = reference_date + 7*horizon) %>%
   select(reference_date, location, horizon, target, target_end_date, output_type, output_type_id, value)
-
-
-#forecast_output1 <- forecast_output1 %>% filter(target == "ILI ED visits")
+# View the first few rows
 head(forecast_output1)
 
 write.csv(forecast_output1, paste("epiENGAGE-baseline/model_output/Both/", reference_date, "-epiENGAGE-baseline.csv", sep=""), 
