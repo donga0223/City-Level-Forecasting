@@ -19,8 +19,9 @@ tx_population2 <- tx_population1 %>%
 
 tx_population3 <- tx_population2 %>%
   group_by(zcta, City, State) %>%
-  summarise(population = sum(as.numeric(pop20)),
+  summarise(population = sum(as.numeric(pop20)*as.numeric(afact)),
             afact = sum(as.numeric(afact)))
+
 
 tx_population4 <- tx_population3 %>%
   filter(State == "TX") %>%

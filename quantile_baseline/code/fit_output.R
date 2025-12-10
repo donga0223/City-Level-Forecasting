@@ -1,9 +1,9 @@
 
 setwd("/Users/dk29776/Dropbox/UTAustin/City-Level-Forecasting-local")
-source("quantile_baseline/code/quantile_baseline.R")
-source("quantile_baseline/code/estimation.R")
-source("quantile_baseline/code/transform.R")
-source("quantile_baseline/code/prediction.R")
+source("epiENGAGE-baseline/code/quantile_baseline.R")
+source("epiENGAGE-baseline/code/estimation.R")
+source("epiENGAGE-baseline/code/transform.R")
+source("epiENGAGE-baseline/code/prediction.R")
 
 
 library(dplyr)
@@ -45,9 +45,9 @@ quantiles <- c(0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.975)  # Predictio
 horizon <- 5  # Forecast 7 days ahead
 num_samples <- 1000  # Number of Monte Carlo samples
 
-forecast_date <- as.Date(today()-28) 
+forecast_date <- as.Date(today()-56) 
 reference_date = forecast_date + (6 - as.integer(format(forecast_date, "%u"))) %% 7
-
+print(reference_date)
 c1 <- read.csv("https://raw.githubusercontent.com/reichlab/flu-metrocast/main/target-data/oracle-output.csv") %>%
   filter(target_end_date <= forecast_date)
 
@@ -66,10 +66,12 @@ forecast_output1 <- forecast_output %>%
   rename(output_type_id = quantile) %>%
   mutate(target_end_date = reference_date + 7*horizon) %>%
   select(reference_date, location, horizon, target, target_end_date, output_type, output_type_id, value)
-# View the first few rows
+
+
+#forecast_output1 <- forecast_output1 %>% filter(target == "ILI ED visits")
 head(forecast_output1)
 
-write.csv(forecast_output1, paste("quantile_baseline/model_output/Both/", reference_date, "-epiENGAGAE-baseline.csv", sep=""), 
+write.csv(forecast_output1, paste("epiENGAGE-baseline/model_output/Both/", reference_date, "-epiENGAGE-baseline.csv", sep=""), 
           row.names = FALSE)
  
           
